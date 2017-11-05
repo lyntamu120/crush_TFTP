@@ -16,7 +16,7 @@ int main(int argc, char *argv[]) {
     int sockfd;
     struct addrinfo hints, *servinfo, *p;
     int rv;
-    int numbytes;
+    int rbytes;
 
     if (argc != 3) {
         fprintf(stderr,"usage: talker hostname message\n");
@@ -45,14 +45,14 @@ int main(int argc, char *argv[]) {
         return 2;
     }
 
-    if ((numbytes = sendto(sockfd, argv[2], strlen(argv[2]), 0,
+    if ((rbytes = sendto(sockfd, argv[2], strlen(argv[2]), 0,
         p->ai_addr, p->ai_addrlen)) == -1) {
         perror("talker: sendto");
         exit(1);
     }
     
     freeaddrinfo(servinfo);
-    printf("talker: sent %d bytes to %s\n", numbytes, argv[1]);
+    printf("talker: sent %d bytes to %s\n", rbytes, argv[1]);
     close(sockfd);
     return 0;
 }

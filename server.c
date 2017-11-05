@@ -60,13 +60,14 @@ int main(int argc, char *argv[]) {
     struct addrinfo hints, *servinfo, *p;
     int rv;
     // int ranPort = MYPORT;
-    int numbytes;
+    int rbytes;
     int opcode;
     struct sockaddr_storage their_addr;
     char buf[MAXBUFLEN];
     char filename[MAXBUFLEN], mode[512];
+    char writeData[MAXBUFLEN];
     char recvErrMsg[512];
-    char dataPac[516], dataGram[512];
+    char dataPac[516], dataGram[512], ackPac[10];
     char *pdataP;
     char *perrP;
     socklen_t addr_len;
@@ -80,7 +81,7 @@ int main(int argc, char *argv[]) {
     char nextchar = -1;
     int numOfTimeouts = 0;
     int isEnd = 0;
-    int numOfBlock;
+    int numOfBlock, numOfACK;
     int errCode;
     char errPac[517];
     char *errMsg;
@@ -122,7 +123,7 @@ int main(int argc, char *argv[]) {
     while(1) {
         addr_len = sizeof their_addr;
         //receive the RRQ or WRQ
-        if ((numbytes = recvfrom(sockfd, buf, MAXBUFLEN-1 , 0, (struct sockaddr *)&their_addr, &addr_len)) == -1) {
+        if ((rbytes = recvfrom(sockfd, buf, MAXBUFLEN, 0, (struct sockaddr *)&their_addr, &addr_len)) == -1) {
             perror("recvfrom");
             exit(1);
         }
@@ -163,28 +164,37 @@ int main(int argc, char *argv[]) {
 
         if (host == RRQ) {
             //handle RRQ
+            fstream = fopen(filename, "r");
+
+            if (fstream == NULL) {
+                //send err message
+                sendErrPac(1, sockfd, "Fail to open the file!", &errPac[0], their_addr, addr_len);
+                perror("openfile");
+                exit(1);
+            } else {
+                //send the first packet
+                printf("%s\n", "File open successfully!");
+
+                count = readForBothMode(mode_flag, fstream, &dataGram[0], &nextchar);
+
+                numOfBlock = 1;
+
+                sendDataPac(count, numOfBlock, sockfd, &dataPac[0], &dataGram[0],their_addr, addr_len);
+            }
         } else if (host == WRQ) {
             //handle WRQ
-        }
+            fstream = fopen(filename, "w");
+            if (fstream == NULL) {
+                //send err message
+                sendErrPac(0, sockfd, "Fail to open the file!", &errPac[0], their_addr, addr_len);
+                perror("openfile");
+                exit(1);
+            } else {
+                //send ACK 0
+                numOfACK = 0;
 
-
-
-        fstream = fopen(filename, "r");
-
-        if (fstream == NULL) {
-            //send err message
-            sendErrPac(0, sockfd, "Fail to open the file!", &errPac[0], their_addr, addr_len);
-            perror("fail to open the file!");
-            exit(1);
-        } else {
-            //send the first packet
-            printf("%s\n", "File open successfully!");
-
-            count = readForBothMode(mode_flag, fstream, &dataGram[0], &nextchar);
-
-            numOfBlock = 1;
-
-            sendDataPac(count, numOfBlock, sockfd, &dataPac[0], &dataGram[0],their_addr, addr_len);
+                sendACKPac(sockfd, numOfACK, &ackPac[0], their_addr, addr_len);
+            }
         }
 
         //handle the rest of the packets
@@ -207,8 +217,10 @@ int main(int argc, char *argv[]) {
                     numOfTimeouts = 0;
                 }
 
+                memset(buf, 0, sizeof buf);
+
                 //try to receive the rest of the packet
-                if ((numbytes = recvfrom(sockfd, buf, MAXBUFLEN - 1, 0, (struct sockaddr *)&their_addr, &addr_len)) == -1) {
+                if ((rbytes = recvfrom(sockfd, buf, MAXBUFLEN, 0, (struct sockaddr *)&their_addr, &addr_len)) == -1) {
                     perror("recvfrom");
                     exit(1);
                 }
@@ -225,12 +237,15 @@ int main(int argc, char *argv[]) {
 
                         if (count < 512) {
                             printf("This is the last block!\n");
+                            fclose(fstream);
                             break;
                         }
 
                         //received the corret ACK
                         //keep sending the next dataPac
-                        numOfBlock++;
+
+                        //Wrap-Around
+                        numOfBlock = (numOfBlock + 1) % 65536;
 
                         count = readForBothMode(mode_flag, fstream, &dataGram[0], &nextchar);
 
@@ -238,7 +253,35 @@ int main(int argc, char *argv[]) {
 
                     }
                 } else if (buf[1] == DATA) {
-                    //write data into a file
+
+                    //obtain packet number
+                    memcpy((char *) &network, &buf[2], 2);
+                    host = ntohs(network);
+
+                    if (host == numOfACK + 1) {
+                        //Wrap-Around
+                        numOfACK = (numOfACK + 1) % 65536;;
+
+                        sendACKPac(sockfd, numOfACK, &ackPac[0], their_addr, addr_len);
+
+                        //write data into a file
+                        //int fprintf(FILE *stream, const char *format, ...)
+                        memcpy(writeData, &buf[4], rbytes);
+                        writeData[rbytes] = '\0';
+                        printf("The received bytes are: %d\n", rbytes);
+                        fprintf(fstream, "%s\n", writeData);
+
+                        if (rbytes < 512) {
+                            printf("%s\n", "Sent the last ACK!");
+                            fclose(fstream);
+                            break;
+                        }
+
+                    } else {
+                        //the blockNum is the previous packet
+                        printf("duplicate data packet received!\n");
+                    }
+
                 } else if (buf[1] == ERR){
                     //obtain errcode
                     memcpy((char *) &network, &buf[2], 2);

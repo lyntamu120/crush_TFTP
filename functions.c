@@ -33,18 +33,45 @@ void sendErrPac(int errCode, int sockfd, char *errMsg, char *errPac, struct sock
 
     memcpy(perrP, errMsg, strlen(errMsg));
     perrP += strlen(errMsg);
-
+    printf("The errMsgis: %s\n", errMsg);
+    printf("The length of the errMsgis: %lu\n", strlen(errMsg));
     *perrP = '\0';
     perrP++;
 
-    if ((sbytes = sendto(sockfd, errPac, strlen(errMsg) + 4, 0, (struct sockaddr *)&their_addr, addr_len)) == -1) {
+    if ((sbytes = sendto(sockfd, errPac, strlen(errMsg) + 5, 0, (struct sockaddr *)&their_addr, addr_len)) == -1) {
         perror("talker: sendto");
         exit(1);
     }
-    perror("fail to open the file!");
-    exit(1);
 }
 
+//send ACK pac to the client
+void sendACKPac(int sockfd, int numOfACK, char *ackPac, struct sockaddr_storage their_addr, socklen_t addr_len) {
+	printf("%s\n", "Inside sendACKPac function!");
+
+	uint16_t host, network;
+	char *packP = ackPac;
+	int sbytes;
+
+	host = ACK;
+	network = htons(host);
+	memcpy(packP, (char *) &network, 2);
+	packP += 2;
+
+	host = numOfACK;
+	network = htons(host);
+	memcpy(packP, (char *) &network, 2);
+	packP += 2;
+
+	if ((sbytes = sendto(sockfd, ackPac, 4, 0, (struct sockaddr *)&their_addr, addr_len)) == -1) {
+        perror("talker: sendto");
+        exit(1);
+    } else {
+        printf("ACK %d send successfully!\n", numOfACK);
+    }
+
+}
+
+//send the data pac to the client
 void sendDataPac(int count, int numOfBlock, int sockfd, char *dataPac, char *dataGram, struct sockaddr_storage their_addr, socklen_t addr_len) {
 	printf("%s\n", "Inside sendDataPac function!");
 	uint16_t host, network;
