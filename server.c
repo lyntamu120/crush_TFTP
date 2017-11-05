@@ -168,30 +168,11 @@ int main(int argc, char *argv[]) {
         } else {
             printf("%s\n", "File open successfully!");
 
-            count = read_netascii(mode_flag, fstream, &dataGram[0], &nextchar);
+            count = readForBothMode(mode_flag, fstream, &dataGram[0], &nextchar);
 
             numOfBlock = 1;
-            pdataP = &dataPac[0];
 
-            host = DATA;
-            network = htons(host);
-            memcpy(pdataP, (char *) &network, 2);
-            pdataP += 2;
-
-            host = numOfBlock;
-            network = htons(host);
-            memcpy(pdataP, (char *) &network, 2);
-            pdataP += 2;
-
-            memcpy(pdataP, dataGram, count);
-
-            if ((sbytes = sendto(sockfd, dataPac, count + 4, 0, (struct sockaddr *)&their_addr, addr_len)) == -1) {
-                perror("talker: sendto");
-                exit(1);
-            } else {
-                printf("The sended bytes are: %d\n", count);
-                printf("Block %d send successfully!\n", numOfBlock);
-            }
+            sendDataPac(count, numOfBlock, sockfd, &dataPac[0], &dataGram[0],their_addr, addr_len);
 
             if (count < 512) {
                 printf("This is the last block!\n");
@@ -242,30 +223,32 @@ int main(int argc, char *argv[]) {
                         //received the corret ACK
                         //keep sending the next dataPac
                         numOfBlock++;
-                        
-                        count = read_netascii(mode_flag, fstream, &dataGram[0], &nextchar);
 
-                        pdataP = &dataPac[0];
+                        count = readForBothMode(mode_flag, fstream, &dataGram[0], &nextchar);
 
-                        host = DATA;
-                        network = htons(host);
-                        memcpy(pdataP, (char *) &network, 2);
-                        pdataP += 2;
+                        sendDataPac(count, numOfBlock, sockfd, &dataPac[0], &dataGram[0],their_addr, addr_len);
 
-                        host = numOfBlock;
-                        network = htons(host);
-                        memcpy(pdataP, (char *) &network, 2);
-                        pdataP += 2;
+                        // pdataP = &dataPac[0];
 
-                        memcpy(pdataP, dataGram, count);
+                        // host = DATA;
+                        // network = htons(host);
+                        // memcpy(pdataP, (char *) &network, 2);
+                        // pdataP += 2;
 
-                        if ((sbytes = sendto(sockfd, dataPac, count + 4, 0, (struct sockaddr *)&their_addr, addr_len)) == -1) {
-                            perror("talker: sendto");
-                            exit(1);
-                        } else {
-                            printf("The sended bytes are: %d\n", sbytes);
-                            printf("Block %d send successfully!\n", numOfBlock);
-                        }
+                        // host = numOfBlock;
+                        // network = htons(host);
+                        // memcpy(pdataP, (char *) &network, 2);
+                        // pdataP += 2;
+
+                        // memcpy(pdataP, dataGram, count);
+
+                        // if ((sbytes = sendto(sockfd, dataPac, count + 4, 0, (struct sockaddr *)&their_addr, addr_len)) == -1) {
+                        //     perror("talker: sendto");
+                        //     exit(1);
+                        // } else {
+                        //     printf("The sended bytes are: %d\n", sbytes);
+                        //     printf("Block %d send successfully!\n", numOfBlock);
+                        // }
                     }
 
 

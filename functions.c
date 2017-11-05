@@ -1,3 +1,4 @@
+//timeout function
 int readable_timeout(int fd, int sec) {
     fd_set rset;
     struct timeval tv;
@@ -14,6 +15,7 @@ int readable_timeout(int fd, int sec) {
 
 //send error pac to the client
 void sendErrPac(int errCode, int sockfd, char *errMsg, char *errPac, struct sockaddr_storage their_addr, socklen_t addr_len) {
+	printf("%s\n", "Inside sendErrPac function!");
 
 	uint16_t host, network;
     char *perrP = errPac;
@@ -43,8 +45,36 @@ void sendErrPac(int errCode, int sockfd, char *errMsg, char *errPac, struct sock
     exit(1);
 }
 
+void sendDataPac(int count, int numOfBlock, int sockfd, char *dataPac, char *dataGram, struct sockaddr_storage their_addr, socklen_t addr_len) {
+	printf("%s\n", "Inside sendDataPac function!");
+	uint16_t host, network;
+	char *pdataP = dataPac;
+	int sbytes;
 
-int read_netascii(int mode_flag, FILE *fstream, char *dataGram, char *pnextchar) {
+    host = DATA;
+    network = htons(host);
+    memcpy(pdataP, (char *) &network, 2);
+    pdataP += 2;
+
+    host = numOfBlock;
+    network = htons(host);
+    memcpy(pdataP, (char *) &network, 2);
+    pdataP += 2;
+
+    memcpy(pdataP, dataGram, count);
+
+    if ((sbytes = sendto(sockfd, dataPac, count + 4, 0, (struct sockaddr *)&their_addr, addr_len)) == -1) {
+        perror("talker: sendto");
+        exit(1);
+    } else {
+        printf("The sended bytes are: %d\n", count);
+        printf("Block %d send successfully!\n", numOfBlock);
+    }
+}
+
+//the read function
+int readForBothMode(int mode_flag, FILE *fstream, char *dataGram, char *pnextchar) {
+	printf("%s\n", "Inside readForBothMode function!");
 	int count;
 	char nextchar = *pnextchar;
 	char c;
