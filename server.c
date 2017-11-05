@@ -1,5 +1,5 @@
 /*
-** server.c -- a datagram sockets "server" demo
+** server.c
 */
 
 // opcode
@@ -176,11 +176,6 @@ int main(int argc, char *argv[]) {
 
             sendDataPac(count, numOfBlock, sockfd, &dataPac[0], &dataGram[0],their_addr, addr_len);
 
-            // if (count < 512) {
-            //     printf("This is the last block!\n");
-            //     break;
-            // }
-
             while(1) {
 
                 //check if timeout
@@ -246,13 +241,6 @@ int main(int argc, char *argv[]) {
                 }
             }
         }
-
-
-
-
-
-
-
 
     }
 
