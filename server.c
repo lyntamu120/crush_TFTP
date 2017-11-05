@@ -79,6 +79,7 @@ int main(int argc, char *argv[]) {
     FILE* fstream;
     int count;
     char nextchar = -1;
+    char prev = -1;
     int numOfTimeouts = 0;
     int isEnd = 0;
     int numOfBlock, numOfACK;
@@ -266,10 +267,11 @@ int main(int argc, char *argv[]) {
 
                         //write data into a file
                         //int fprintf(FILE *stream, const char *format, ...)
-                        memcpy(writeData, &buf[4], rbytes);
-                        writeData[rbytes] = '\0';
-                        printf("The received bytes are: %d\n", rbytes);
-                        fprintf(fstream, "%s\n", writeData);
+                        memcpy(writeData, &buf[4], rbytes - 4);
+                        printf("The received bytes are: %d\n", rbytes - 4);
+
+                        // fprintf(fstream, "%s\n", writeData);
+                        writeForBothMode(mode_flag, fstream, writeData, rbytes - 4, &prev);
 
                         if (rbytes < 512) {
                             printf("%s\n", "Sent the last ACK!");

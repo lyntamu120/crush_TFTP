@@ -147,3 +147,38 @@ int readForBothMode(int mode_flag, FILE *fstream, char *dataGram, char *pnextcha
     *pnextchar = nextchar;
     return count;
 }
+
+//the write function
+void writeForBothMode(int mode_flag, FILE *fstream, char *data, int writeLen, char *pPrev) {
+	printf("%s\n", "Inside writeForBothMode function!");
+	int count;
+	char ch;
+	char prev = *pPrev;
+	int actual = 0;
+
+	for(count = 0 ; count < writeLen; count++) {	
+		if (mode_flag == 1) {
+			//in netassci mode
+			ch = data[count];
+	   		if (ch == '\r') {
+	   			prev = '\r';
+	   			continue;
+	   		}
+
+	   		if (prev == '\r') {
+	   			if (ch == '\0') {
+	   				ch = prev;
+	   			}
+	   			prev = -1;
+	   		} 
+	      	putc(ch, fstream);
+		} else {
+			//in octet mode
+			ch = data[count];
+			putc(ch, fstream);
+		}
+		actual++;	
+   }
+   printf("Write %d bytes into the file!\n", actual);
+   *pPrev = prev;
+}
