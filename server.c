@@ -128,10 +128,11 @@ int main(int argc, char *argv[]) {
         }
 
 
+        //decode opcode
         memcpy((char *) &network, &buf[0], 2);
         host = ntohs(network);
 
-        printf("The opcode is: %i\n", host);
+        //printf("The opcode is: %i\n", host);
 
         //decode filename and mode
         strcpy(filename, &buf[2]);
@@ -158,6 +159,14 @@ int main(int argc, char *argv[]) {
             sendErrPac(4, sockfd, "Illegal TFTP operation.", &errPac[0], their_addr, addr_len);
         }
 
+        //The first packet can only be RRQ or WRQ
+
+        if (host == RRQ) {
+            //handle RRQ
+        } else if (host == WRQ) {
+            //handle WRQ
+        }
+
 
 
         fstream = fopen(filename, "r");
@@ -168,6 +177,7 @@ int main(int argc, char *argv[]) {
             perror("fail to open the file!");
             exit(1);
         } else {
+            //send the first packet
             printf("%s\n", "File open successfully!");
 
             count = readForBothMode(mode_flag, fstream, &dataGram[0], &nextchar);
@@ -175,8 +185,10 @@ int main(int argc, char *argv[]) {
             numOfBlock = 1;
 
             sendDataPac(count, numOfBlock, sockfd, &dataPac[0], &dataGram[0],their_addr, addr_len);
+        }
 
-            while(1) {
+        //handle the rest of the packets
+        while(1) {
 
                 //check if timeout
                 while (readable_timeout(sockfd, 1) == 0) {
@@ -240,7 +252,6 @@ int main(int argc, char *argv[]) {
 
                 }
             }
-        }
 
     }
 
