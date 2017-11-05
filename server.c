@@ -75,7 +75,8 @@ int main(int argc, char *argv[]) {
     int sbytes;
     int mode_flag = 0;
     FILE* fstream;
-    int count, nextchar = -1;
+    int count;
+    char nextchar = -1;
     int numOfTimeouts = 0;
     int isEnd = 0;
     int numOfBlock;
@@ -152,7 +153,7 @@ int main(int argc, char *argv[]) {
             mode_flag = 2;
         } else {
             //send error message
-
+            sendErrPac(4, sockfd, "Illegal TFTP operation.", &errPac[0], their_addr, addr_len);
         }
 
 
@@ -161,52 +162,14 @@ int main(int argc, char *argv[]) {
 
         if (fstream == NULL) {
             //send err message
-            sendErrPac(sockfd, "Fail to open the file!", &errPac[0], their_addr, addr_len);
+            sendErrPac(0, sockfd, "Fail to open the file!", &errPac[0], their_addr, addr_len);
             perror("fail to open the file!");
             exit(1);
         } else {
             printf("%s\n", "File open successfully!");
-            for (count = 0; count < MAXBYTES; count++) {
-                if (mode_flag == 1) {
-                    //in netascii mode, change the initial file content
-                    if (nextchar >= 0) {
-                        dataGram[count] = nextchar;
-                        nextchar = -1;
-                        continue;
-                    }
 
-                    c = getc(fstream);
+            count = read_netascii(mode_flag, fstream, &dataGram[0], &nextchar);
 
-                    if (c == EOF) {
-                        if (ferror(fstream)) {
-                            printf("%s\n", "read err from getc on local file");
-                        }
-                        break;
-                    } else if (c == '\n') {
-                        c = '\r';
-                        nextchar = '\n';
-                    } else if (c == '\r') {
-                        nextchar = '\0';
-                    } else {
-                        nextchar = -1;
-                    }
-                    dataGram[count] = c;
-                } else {
-                    //in octet mode
-                    c = getc(fstream);
-                    if (c == EOF) {
-                        if (ferror(fstream)) {
-                            printf("%s\n", "read err from getc on local file");
-                        }
-                        break;
-                    }
-                    dataGram[count] = c;
-                }
-
-
-
-            }
-            // count = read_netascii(fstream, &dataGram[0], &nextchar);
             numOfBlock = 1;
             pdataP = &dataPac[0];
 
@@ -279,43 +242,8 @@ int main(int argc, char *argv[]) {
                         //received the corret ACK
                         //keep sending the next dataPac
                         numOfBlock++;
-                        for (count = 0; count < MAXBYTES; count++) {
-                            if (mode_flag == 1) {
-                                if (nextchar >= 0) {
-                                    dataGram[count] = nextchar;
-                                    nextchar = -1;
-                                    continue;
-                                }
-
-                                c = getc(fstream);
-
-                                if (c == EOF) {
-                                    if (ferror(fstream)) {
-                                        printf("%s\n", "read err from getc on local file");
-                                    }
-                                    break;
-                                } else if (c == '\n') {
-                                    c = '\r';
-                                    nextchar = '\n';
-                                } else if (c == '\r') {
-                                    nextchar = '\0';
-                                } else {
-                                    nextchar = -1;
-                                }
-                                dataGram[count] = c;
-                            } else {
-                                //in octet mode
-                                c = getc(fstream);
-                                if (c == EOF) {
-                                    if (ferror(fstream)) {
-                                        printf("%s\n", "read err from getc on local file");
-                                    }
-                                    break;
-                                }
-                                dataGram[count] = c;
-                            }
-
-                        }
+                        
+                        count = read_netascii(mode_flag, fstream, &dataGram[0], &nextchar);
 
                         pdataP = &dataPac[0];
 

@@ -13,7 +13,7 @@ int readable_timeout(int fd, int sec) {
 
 
 //send error pac to the client
-void sendErrPac(int sockfd, char *errMsg, char *errPac, struct sockaddr_storage their_addr, socklen_t addr_len) {
+void sendErrPac(int errCode, int sockfd, char *errMsg, char *errPac, struct sockaddr_storage their_addr, socklen_t addr_len) {
 
 	uint16_t host, network;
     char *perrP = errPac;
@@ -24,7 +24,7 @@ void sendErrPac(int sockfd, char *errMsg, char *errPac, struct sockaddr_storage 
     memcpy(perrP, (char *) &network, 2);
     perrP += 2;
 
-    host = 0;
+    host = errCode;
     network = htons(host);
     memcpy(perrP, (char *) &network, 2);
     perrP += 2;
@@ -44,33 +44,49 @@ void sendErrPac(int sockfd, char *errMsg, char *errPac, struct sockaddr_storage 
 }
 
 
-// int read_netascii(FILE *fstream, char *pd, char *pnextchar) {
-//     int count;
-//     char nc = *pnextchar;
-//     char c;
-//     for (count = 0; count < MAXBYTES; count++) {
-//         if (nc >= 0) {
-//             *(pd + count) = nc;
-//             nc = -1;
-//             continue;
-//         }
-//
-//         c = getc(fstream);
-//
-//         if (c == EOF) {
-//             if (ferror(fstream)) {
-//                 printf("%s\n", "read err from getc on local file");
-//             }
-//             return  count;
-//         } else if (c == '\n') {
-//             c = '\r';
-//             nc = '\n';
-//         } else if (c == '\r') {
-//             nc = '\0';
-//         } else {
-//             nc = -1;
-//         }
-//         *(pd + count) = c;
-//         count;
-//     }
-// }
+int read_netascii(int mode_flag, FILE *fstream, char *dataGram, char *pnextchar) {
+	int count;
+	char nextchar = *pnextchar;
+	char c;
+
+    for (count = 0; count < MAXBYTES; count++) {
+        if (mode_flag == 1) {
+            //in netascii mode, change the initial file content
+            if (nextchar >= 0) {
+                dataGram[count] = nextchar;
+                nextchar = -1;
+                continue;
+            }
+
+            c = getc(fstream);
+
+            if (c == EOF) {
+                if (ferror(fstream)) {
+                    printf("%s\n", "read err from getc on local file");
+                }
+                break;
+            } else if (c == '\n') {
+                c = '\r';
+                nextchar = '\n';
+            } else if (c == '\r') {
+                nextchar = '\0';
+            } else {
+                nextchar = -1;
+            }
+            dataGram[count] = c;
+        } else {
+            //in octet mode
+            c = getc(fstream);
+            if (c == EOF) {
+                if (ferror(fstream)) {
+                    printf("%s\n", "read err from getc on local file");
+                }
+                break;
+            }
+            dataGram[count] = c;
+        }
+    }
+
+    *pnextchar = nextchar;
+    return count;
+}
