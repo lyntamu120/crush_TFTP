@@ -56,9 +56,10 @@ void *get_in_addr(struct sockaddr *sa) {
 }
 
 int main(int argc, char *argv[]) {
-    int sockfd;
+    int sockfd, new_fd;
     struct addrinfo hints, *servinfo, *p;
     int rv;
+    struct sockaddr_in addr;
     // int ranPort = MYPORT;
     int rbytes;
     int opcode;
@@ -78,6 +79,7 @@ int main(int argc, char *argv[]) {
     int mode_flag = 0;
     FILE* fstream;
     int count;
+    int yes = 1;
     char nextchar = -1;
     char prev = -1;
     int numOfTimeouts = 0;
@@ -102,19 +104,19 @@ int main(int argc, char *argv[]) {
     for(p = servinfo; p != NULL; p = p->ai_next) {
         if ((sockfd = socket(p->ai_family, p->ai_socktype,
             p->ai_protocol)) == -1) {
-            perror("listener: socket");
+            perror("Server: socket");
             continue;
         }
         if (bind(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
             close(sockfd);
-            perror("listener: bind");
+            perror("Server: bind");
             continue;
         }
         break;
     }
 
     if (p == NULL) {
-        fprintf(stderr, "listener: failed to bind socket\n");
+        fprintf(stderr, "Server: failed to bind socket\n");
         return 2;
     }
     freeaddrinfo(servinfo);
@@ -129,174 +131,384 @@ int main(int argc, char *argv[]) {
             exit(1);
         }
 
+        if (!fork()) {
+            close(sockfd); // child doesn't need the main sockfd
 
-        //decode opcode
-        memcpy((char *) &network, &buf[0], 2);
-        host = ntohs(network);
+            //create new socketfd
+            memset(&addr, 0, sizeof addr);
 
-        //printf("The opcode is: %i\n", host);
+            addr.sin_family = AF_INET;
+            addr.sin_addr.s_addr = inet_addr("0.0.0.0");
+            addr.sin_port = htons(0); //assign an ephemeral port
 
-        //decode filename and mode
-        strcpy(filename, &buf[2]);
-        strcpy(mode, &buf[2 + strlen(filename) + 1]);
-
-        //normalization the mode
-        int i = 0;
-        while(mode[i]) {
-          mode[i] = toupper(mode[i]);
-          i++;
-        }
-
-        printf("Server: filename is \"%s\"\n", filename);
-        printf("Server: mode is \"%s\"\n", mode);
-
-        if (strcmp(MODE1, mode) == 0) {
-            //in netascii mode
-            mode_flag = 1;
-        } else if (strcmp(MODE2, mode) == 0) {
-            //in octet mode
-            mode_flag = 2;
-        } else {
-            //send error message
-            sendErrPac(4, sockfd, "Illegal TFTP operation.", &errPac[0], their_addr, addr_len);
-        }
-
-        //The first packet can only be RRQ or WRQ
-
-        if (host == RRQ) {
-            //handle RRQ
-            fstream = fopen(filename, "r");
-
-            if (fstream == NULL) {
-                //send err message
-                sendErrPac(1, sockfd, "Fail to open the file!", &errPac[0], their_addr, addr_len);
-                perror("openfile");
+            if ((new_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
+                perror("child process server: socket");
                 exit(1);
-            } else {
-                //send the first packet
-                printf("%s\n", "File open successfully!");
-
-                count = readForBothMode(mode_flag, fstream, &dataGram[0], &nextchar);
-
-                numOfBlock = 1;
-
-                sendDataPac(count, numOfBlock, sockfd, &dataPac[0], &dataGram[0],their_addr, addr_len);
             }
-        } else if (host == WRQ) {
-            //handle WRQ
-            fstream = fopen(filename, "w");
-            if (fstream == NULL) {
-                //send err message
-                sendErrPac(0, sockfd, "Fail to open the file!", &errPac[0], their_addr, addr_len);
-                perror("openfile");
+
+            if (setsockopt(new_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) == -1) {
+                perror("child process server: setsockopt");
                 exit(1);
-            } else {
-                //send ACK 0
-                numOfACK = 0;
-
-                sendACKPac(sockfd, numOfACK, &ackPac[0], their_addr, addr_len);
             }
-        }
 
-        //handle the rest of the packets
-        while(1) {
+            if (bind(new_fd, (struct sockaddr *)&addr, sizeof addr) == -1) {
+                close(new_fd);
+                perror("child process server: bind");
+                exit(1);
+            }
+            
+            /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+            //begin handling requests
 
-                //check if timeout
-                while (readable_timeout(sockfd, 1) == 0) {
-                    printf("Timeout!\n");
-                    numOfTimeouts++;
-                    if (numOfTimeouts >= 10) {
-                        isEnd = 1;
-                        break;
-                    }
-                }
+            //decode opcode
+            memcpy((char *) &network, &buf[0], 2);
+            host = ntohs(network);
 
-                if (isEnd == 1) {
-                    printf("There is no response from the client!\n");
-                    break;
-                } else {
-                    numOfTimeouts = 0;
-                }
+            //printf("The opcode is: %i\n", host);
 
-                memset(buf, 0, sizeof buf);
+            //decode filename and mode
+            strcpy(filename, &buf[2]);
+            strcpy(mode, &buf[2 + strlen(filename) + 1]);
 
-                //try to receive the rest of the packet
-                if ((rbytes = recvfrom(sockfd, buf, MAXBUFLEN, 0, (struct sockaddr *)&their_addr, &addr_len)) == -1) {
-                    perror("recvfrom");
+            //normalization the mode
+            int i = 0;
+            while(mode[i]) {
+              mode[i] = toupper(mode[i]);
+              i++;
+            }
+
+            printf("Server: filename is \"%s\"\n", filename);
+            printf("Server: mode is \"%s\"\n", mode);
+
+            if (strcmp(MODE1, mode) == 0) {
+                //in netascii mode
+                mode_flag = 1;
+            } else if (strcmp(MODE2, mode) == 0) {
+                //in octet mode
+                mode_flag = 2;
+            } else {
+                //send error message
+                sendErrPac(4, new_fd, "Illegal TFTP operation.", &errPac[0], their_addr, addr_len);
+            }
+
+            //The first packet can only be RRQ or WRQ
+
+            if (host == RRQ) {
+                //handle RRQ
+                fstream = fopen(filename, "r");
+
+                if (fstream == NULL) {
+                    //send err message
+                    sendErrPac(1, new_fd, "Fail to open the file!", &errPac[0], their_addr, addr_len);
+                    perror("openfile");
                     exit(1);
+                } else {
+                    //send the first packet
+                    printf("%s\n", "File open successfully!");
+
+                    count = readForBothMode(mode_flag, fstream, &dataGram[0], &nextchar);
+
+                    numOfBlock = 1;
+
+                    sendDataPac(count, numOfBlock, new_fd, &dataPac[0], &dataGram[0], their_addr, addr_len);
+
+
                 }
+            } else if (host == WRQ) {
+                //handle WRQ
+                fstream = fopen(filename, "w");
+                if (fstream == NULL) {
+                    //send err message
+                    sendErrPac(0, new_fd, "Fail to open the file!", &errPac[0], their_addr, addr_len);
+                    perror("openfile");
+                    exit(1);
+                } else {
+                    //send ACK 0
+                    numOfACK = 0;
 
-                //handle ACK
-                if (buf[1] == ACK) {
-                    //obtain packet number
-                    memcpy((char *) &network, &buf[2], 2);
-                    host = ntohs(network);
-
-                    if (host != numOfBlock) {
-                        printf("%s\n", "duplicate ACK received!");
-                    } else {
-
-                        if (count < 512) {
-                            printf("This is the last block!\n");
-                            fclose(fstream);
-                            break;
-                        }
-
-                        //received the corret ACK
-                        //keep sending the next dataPac
-
-                        //Wrap-Around
-                        numOfBlock = (numOfBlock + 1) % 65536;
-
-                        count = readForBothMode(mode_flag, fstream, &dataGram[0], &nextchar);
-
-                        sendDataPac(count, numOfBlock, sockfd, &dataPac[0], &dataGram[0],their_addr, addr_len);
-
-                    }
-                } else if (buf[1] == DATA) {
-
-                    //obtain packet number
-                    memcpy((char *) &network, &buf[2], 2);
-                    host = ntohs(network);
-
-                    if (host == numOfACK + 1) {
-                        //Wrap-Around
-                        numOfACK = (numOfACK + 1) % 65536;;
-
-                        sendACKPac(sockfd, numOfACK, &ackPac[0], their_addr, addr_len);
-
-                        //write data into a file
-                        //int fprintf(FILE *stream, const char *format, ...)
-                        memcpy(writeData, &buf[4], rbytes - 4);
-                        printf("The received bytes are: %d\n", rbytes - 4);
-
-                        // fprintf(fstream, "%s\n", writeData);
-                        writeForBothMode(mode_flag, fstream, writeData, rbytes - 4, &prev);
-
-                        if (rbytes < 512) {
-                            printf("%s\n", "Sent the last ACK!");
-                            fclose(fstream);
-                            break;
-                        }
-
-                    } else {
-                        //the blockNum is the previous packet
-                        printf("duplicate data packet received!\n");
-                    }
-
-                } else if (buf[1] == ERR){
-                    //obtain errcode
-                    memcpy((char *) &network, &buf[2], 2);
-                    host = ntohs(network);
-
-                    //obtain errmessage
-                    strcpy(recvErrMsg, &buf[4]);
-
-                    printf("Error message received, error code: %i\n", host);
-                    printf("Error message received, error message: %s\n", recvErrMsg);
-
+                    sendACKPac(new_fd, numOfACK, &ackPac[0], their_addr, addr_len);
                 }
             }
+
+            //handle the rest of the packets
+            while(1) {
+
+                    //check if timeout
+                    while (readable_timeout(new_fd, 1) == 0) {
+                        printf("Timeout!\n");
+                        numOfTimeouts++;
+                        if (numOfTimeouts >= 10) {
+                            isEnd = 1;
+                            break;
+                        }
+                    }
+
+                    if (isEnd == 1) {
+                        printf("There is no response from the client!\n");
+                        close(new_fd);
+                        exit(0);
+                    } else {
+                        numOfTimeouts = 0;
+                    }
+
+                    memset(buf, 0, sizeof buf);
+
+                    //try to receive the rest of the packet
+                    if ((rbytes = recvfrom(new_fd, buf, MAXBUFLEN, 0, (struct sockaddr *)&their_addr, &addr_len)) == -1) {
+                        perror("recvfrom");
+                        exit(1);
+                    }
+
+                    //handle ACK
+                    if (buf[1] == ACK) {
+                        //obtain packet number
+                        memcpy((char *) &network, &buf[2], 2);
+                        host = ntohs(network);
+
+                        if (host != numOfBlock) {
+                            printf("%s\n", "duplicate ACK received!");
+                        } else {
+
+                            if (count < 512) {
+                                printf("This is the last block!\n");
+                                fclose(fstream);
+                                break;
+                            }
+
+                            //received the corret ACK
+                            //keep sending the next dataPac
+
+                            //Wrap-Around
+                            numOfBlock = (numOfBlock + 1) % 65536;
+
+                            count = readForBothMode(mode_flag, fstream, &dataGram[0], &nextchar);
+
+                            sendDataPac(count, numOfBlock, new_fd, &dataPac[0], &dataGram[0], (struct sockaddr *)&their_addr, addr_len);
+
+                        }
+                    } else if (buf[1] == DATA) {
+
+                        //obtain packet number
+                        memcpy((char *) &network, &buf[2], 2);
+                        host = ntohs(network);
+
+                        if (host == numOfACK + 1) {
+                            //Wrap-Around
+                            numOfACK = (numOfACK + 1) % 65536;;
+
+                            sendACKPac(new_fd, numOfACK, &ackPac[0], their_addr, addr_len);
+
+                            //write data into a file
+                            //int fprintf(FILE *stream, const char *format, ...)
+                            memcpy(writeData, &buf[4], rbytes - 4);
+                            printf("The received bytes are: %d\n", rbytes - 4);
+
+                            // fprintf(fstream, "%s\n", writeData);
+                            writeForBothMode(mode_flag, fstream, writeData, rbytes - 4, &prev);
+
+                            if (rbytes < 512) {
+                                printf("%s\n", "Sent the last ACK!");
+                                fclose(fstream);
+                                break;
+                            }
+
+                        } else {
+                            //the blockNum is the previous packet
+                            printf("duplicate data packet received!\n");
+                        }
+
+                    } else if (buf[1] == ERR){
+                        //obtain errcode
+                        memcpy((char *) &network, &buf[2], 2);
+                        host = ntohs(network);
+
+                        //obtain errmessage
+                        strcpy(recvErrMsg, &buf[4]);
+
+                        printf("Error message received, error code: %i\n", host);
+                        printf("Error message received, error message: %s\n", recvErrMsg);
+                        exit(0);
+
+                    }
+                }
+
+
+
+
+
+            close(new_fd);
+            exit(0);
+        } 
+
+
+        // //decode opcode
+        // memcpy((char *) &network, &buf[0], 2);
+        // host = ntohs(network);
+
+        // //printf("The opcode is: %i\n", host);
+
+        // //decode filename and mode
+        // strcpy(filename, &buf[2]);
+        // strcpy(mode, &buf[2 + strlen(filename) + 1]);
+
+        // //normalization the mode
+        // int i = 0;
+        // while(mode[i]) {
+        //   mode[i] = toupper(mode[i]);
+        //   i++;
+        // }
+
+        // printf("Server: filename is \"%s\"\n", filename);
+        // printf("Server: mode is \"%s\"\n", mode);
+
+        // if (strcmp(MODE1, mode) == 0) {
+        //     //in netascii mode
+        //     mode_flag = 1;
+        // } else if (strcmp(MODE2, mode) == 0) {
+        //     //in octet mode
+        //     mode_flag = 2;
+        // } else {
+        //     //send error message
+        //     sendErrPac(4, sockfd, "Illegal TFTP operation.", &errPac[0], their_addr, addr_len);
+        // }
+
+        // //The first packet can only be RRQ or WRQ
+
+        // if (host == RRQ) {
+        //     //handle RRQ
+        //     fstream = fopen(filename, "r");
+
+        //     if (fstream == NULL) {
+        //         //send err message
+        //         sendErrPac(1, sockfd, "Fail to open the file!", &errPac[0], their_addr, addr_len);
+        //         perror("openfile");
+        //         exit(1);
+        //     } else {
+        //         //send the first packet
+        //         printf("%s\n", "File open successfully!");
+
+        //         count = readForBothMode(mode_flag, fstream, &dataGram[0], &nextchar);
+
+        //         numOfBlock = 1;
+
+        //         sendDataPac(count, numOfBlock, sockfd, &dataPac[0], &dataGram[0],their_addr, addr_len);
+        //     }
+        // } else if (host == WRQ) {
+        //     //handle WRQ
+        //     fstream = fopen(filename, "w");
+        //     if (fstream == NULL) {
+        //         //send err message
+        //         sendErrPac(0, sockfd, "Fail to open the file!", &errPac[0], their_addr, addr_len);
+        //         perror("openfile");
+        //         exit(1);
+        //     } else {
+        //         //send ACK 0
+        //         numOfACK = 0;
+
+        //         sendACKPac(sockfd, numOfACK, &ackPac[0], their_addr, addr_len);
+        //     }
+        // }
+
+        // //handle the rest of the packets
+        // while(1) {
+
+        //         //check if timeout
+        //         while (readable_timeout(sockfd, 1) == 0) {
+        //             printf("Timeout!\n");
+        //             numOfTimeouts++;
+        //             if (numOfTimeouts >= 10) {
+        //                 isEnd = 1;
+        //                 break;
+        //             }
+        //         }
+
+        //         if (isEnd == 1) {
+        //             printf("There is no response from the client!\n");
+        //             break;
+        //         } else {
+        //             numOfTimeouts = 0;
+        //         }
+
+        //         memset(buf, 0, sizeof buf);
+
+        //         //try to receive the rest of the packet
+        //         if ((rbytes = recvfrom(sockfd, buf, MAXBUFLEN, 0, (struct sockaddr *)&their_addr, &addr_len)) == -1) {
+        //             perror("recvfrom");
+        //             exit(1);
+        //         }
+
+        //         //handle ACK
+        //         if (buf[1] == ACK) {
+        //             //obtain packet number
+        //             memcpy((char *) &network, &buf[2], 2);
+        //             host = ntohs(network);
+
+        //             if (host != numOfBlock) {
+        //                 printf("%s\n", "duplicate ACK received!");
+        //             } else {
+
+        //                 if (count < 512) {
+        //                     printf("This is the last block!\n");
+        //                     fclose(fstream);
+        //                     break;
+        //                 }
+
+        //                 //received the corret ACK
+        //                 //keep sending the next dataPac
+
+        //                 //Wrap-Around
+        //                 numOfBlock = (numOfBlock + 1) % 65536;
+
+        //                 count = readForBothMode(mode_flag, fstream, &dataGram[0], &nextchar);
+
+        //                 sendDataPac(count, numOfBlock, sockfd, &dataPac[0], &dataGram[0],their_addr, addr_len);
+
+        //             }
+        //         } else if (buf[1] == DATA) {
+
+        //             //obtain packet number
+        //             memcpy((char *) &network, &buf[2], 2);
+        //             host = ntohs(network);
+
+        //             if (host == numOfACK + 1) {
+        //                 //Wrap-Around
+        //                 numOfACK = (numOfACK + 1) % 65536;;
+
+        //                 sendACKPac(sockfd, numOfACK, &ackPac[0], their_addr, addr_len);
+
+        //                 //write data into a file
+        //                 //int fprintf(FILE *stream, const char *format, ...)
+        //                 memcpy(writeData, &buf[4], rbytes - 4);
+        //                 printf("The received bytes are: %d\n", rbytes - 4);
+
+        //                 // fprintf(fstream, "%s\n", writeData);
+        //                 writeForBothMode(mode_flag, fstream, writeData, rbytes - 4, &prev);
+
+        //                 if (rbytes < 512) {
+        //                     printf("%s\n", "Sent the last ACK!");
+        //                     fclose(fstream);
+        //                     break;
+        //                 }
+
+        //             } else {
+        //                 //the blockNum is the previous packet
+        //                 printf("duplicate data packet received!\n");
+        //             }
+
+        //         } else if (buf[1] == ERR){
+        //             //obtain errcode
+        //             memcpy((char *) &network, &buf[2], 2);
+        //             host = ntohs(network);
+
+        //             //obtain errmessage
+        //             strcpy(recvErrMsg, &buf[4]);
+
+        //             printf("Error message received, error code: %i\n", host);
+        //             printf("Error message received, error message: %s\n", recvErrMsg);
+        //             exit(0);
+
+        //         }
+        //     }
 
     }
 
