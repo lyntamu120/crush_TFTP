@@ -65,6 +65,7 @@ int main(int argc, char *argv[]) {
     struct sockaddr_storage their_addr;
     char buf[MAXBUFLEN];
     char filename[MAXBUFLEN], mode[512];
+    char recvErrMsg[512];
     char dataPac[516], dataGram[512];
     char *pdataP;
     char *perrP;
@@ -83,6 +84,7 @@ int main(int argc, char *argv[]) {
     int errCode;
     char errPac[517];
     char *errMsg;
+
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC; // set to AF_INET to force IPv4
@@ -174,18 +176,18 @@ int main(int argc, char *argv[]) {
 
             sendDataPac(count, numOfBlock, sockfd, &dataPac[0], &dataGram[0],their_addr, addr_len);
 
-            if (count < 512) {
-                printf("This is the last block!\n");
-                break;
-            }
+            // if (count < 512) {
+            //     printf("This is the last block!\n");
+            //     break;
+            // }
 
             while(1) {
+
                 //check if timeout
                 while (readable_timeout(sockfd, 1) == 0) {
                     printf("Timeout!\n");
                     numOfTimeouts++;
                     if (numOfTimeouts >= 10) {
-
                         isEnd = 1;
                         break;
                     }
@@ -198,7 +200,7 @@ int main(int argc, char *argv[]) {
                     numOfTimeouts = 0;
                 }
 
-                //try to receive ACKs
+                //try to receive the rest of the packet
                 if ((numbytes = recvfrom(sockfd, buf, MAXBUFLEN - 1, 0, (struct sockaddr *)&their_addr, &addr_len)) == -1) {
                     perror("recvfrom");
                     exit(1);
@@ -206,10 +208,9 @@ int main(int argc, char *argv[]) {
 
                 //handle ACK
                 if (buf[1] == ACK) {
-                    char *tmp = &buf[0] + 2;
-                    memcpy((char *) &network, tmp, 2);
+                    //obtain packet number
+                    memcpy((char *) &network, &buf[2], 2);
                     host = ntohs(network);
-                    tmp += 2;
 
                     if (host != numOfBlock) {
                         printf("%s\n", "duplicate ACK received!");
@@ -228,29 +229,19 @@ int main(int argc, char *argv[]) {
 
                         sendDataPac(count, numOfBlock, sockfd, &dataPac[0], &dataGram[0],their_addr, addr_len);
 
-                        // pdataP = &dataPac[0];
-
-                        // host = DATA;
-                        // network = htons(host);
-                        // memcpy(pdataP, (char *) &network, 2);
-                        // pdataP += 2;
-
-                        // host = numOfBlock;
-                        // network = htons(host);
-                        // memcpy(pdataP, (char *) &network, 2);
-                        // pdataP += 2;
-
-                        // memcpy(pdataP, dataGram, count);
-
-                        // if ((sbytes = sendto(sockfd, dataPac, count + 4, 0, (struct sockaddr *)&their_addr, addr_len)) == -1) {
-                        //     perror("talker: sendto");
-                        //     exit(1);
-                        // } else {
-                        //     printf("The sended bytes are: %d\n", sbytes);
-                        //     printf("Block %d send successfully!\n", numOfBlock);
-                        // }
                     }
+                } else if (buf[1] == DATA) {
+                    //write data into a file
+                } else if (buf[1] == ERR){
+                    //obtain errcode
+                    memcpy((char *) &network, &buf[2], 2);
+                    host = ntohs(network);
 
+                    //obtain errmessage
+                    strcpy(recvErrMsg, &buf[4]);
+
+                    printf("Error message received, error code: %i\n", host);
+                    printf("Error message received, error message: %s\n", recvErrMsg);
 
                 }
             }
