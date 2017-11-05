@@ -15,7 +15,6 @@ int readable_timeout(int fd, int sec) {
 
 //send error pac to the client
 void sendErrPac(int errCode, int sockfd, char *errMsg, char *errPac, struct sockaddr_storage their_addr, socklen_t addr_len) {
-	printf("%s\n", "Inside sendErrPac function!");
 
 	uint16_t host, network;
     char *perrP = errPac;
@@ -33,8 +32,8 @@ void sendErrPac(int errCode, int sockfd, char *errMsg, char *errPac, struct sock
 
     memcpy(perrP, errMsg, strlen(errMsg));
     perrP += strlen(errMsg);
-    printf("The errMsgis: %s\n", errMsg);
-    printf("The length of the errMsgis: %lu\n", strlen(errMsg));
+    printf("The errMsg is: %s\n", errMsg);
+    printf("The length of the errMsg is: %lu\n", strlen(errMsg));
     *perrP = '\0';
     perrP++;
 
@@ -46,7 +45,7 @@ void sendErrPac(int errCode, int sockfd, char *errMsg, char *errPac, struct sock
 
 //send ACK pac to the client
 void sendACKPac(int sockfd, int numOfACK, char *ackPac, struct sockaddr_storage their_addr, socklen_t addr_len) {
-	printf("%s\n", "Inside sendACKPac function!");
+	// printf("%s\n", "Inside sendACKPac function!");
 
 	uint16_t host, network;
 	char *packP = ackPac;
@@ -73,7 +72,7 @@ void sendACKPac(int sockfd, int numOfACK, char *ackPac, struct sockaddr_storage 
 
 //send the data pac to the client
 void sendDataPac(int count, int numOfBlock, int sockfd, char *dataPac, char *dataGram, struct sockaddr_storage *their_addr, socklen_t addr_len) {
-	printf("%s\n", "Inside sendDataPac function!");
+	// printf("%s\n", "Inside sendDataPac function!");
 	uint16_t host, network;
 	char *pdataP = dataPac;
 	int sbytes;
@@ -101,7 +100,7 @@ void sendDataPac(int count, int numOfBlock, int sockfd, char *dataPac, char *dat
 
 //the read function
 int readForBothMode(int mode_flag, FILE *fstream, char *dataGram, char *pnextchar) {
-	printf("%s\n", "Inside readForBothMode function!");
+	// printf("%s\n", "Inside readForBothMode function!");
 	int count;
 	char nextchar = *pnextchar;
 	char c;
@@ -150,7 +149,7 @@ int readForBothMode(int mode_flag, FILE *fstream, char *dataGram, char *pnextcha
 
 //the write function
 void writeForBothMode(int mode_flag, FILE *fstream, char *data, int writeLen, char *pPrev) {
-	printf("%s\n", "Inside writeForBothMode function!");
+	// printf("%s\n", "Inside writeForBothMode function!");
 	int count;
 	char ch;
 	char prev = *pPrev;

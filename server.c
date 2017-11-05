@@ -89,6 +89,9 @@ int main(int argc, char *argv[]) {
     char errPac[517];
     char *errMsg;
 
+    if (argc < 3) {
+        printf("Please type in the follwing pattern: ./server <IP> <Port>\n");
+    }
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC; // set to AF_INET to force IPv4
@@ -120,7 +123,7 @@ int main(int argc, char *argv[]) {
         return 2;
     }
     freeaddrinfo(servinfo);
-    printf("listener: waiting to recvfrom...\n");
+    printf("Server: waiting to recvfrom...\n");
 
 
     while(1) {
@@ -131,7 +134,6 @@ int main(int argc, char *argv[]) {
             exit(1);
         }
 
-        printf("%s\n", ((struct sockaddr *)&their_addr)->sa_data);
 
         if (!fork()) {
             close(sockfd); // child doesn't need the main sockfd
@@ -191,6 +193,8 @@ int main(int argc, char *argv[]) {
             } else {
                 //send error message
                 sendErrPac(4, new_fd, "Illegal TFTP operation.", &errPac[0], their_addr, addr_len);
+                isEnd = 1;
+                exit(1);
             }
 
             //The first packet can only be RRQ or WRQ
@@ -203,7 +207,7 @@ int main(int argc, char *argv[]) {
                     //send err message
                     sendErrPac(1, new_fd, "Fail to open the file!", &errPac[0], their_addr, addr_len);
                     perror("openfile");
-                    exit(1);
+                    isEnd = 1;
                 } else {
                     //send the first packet
                     printf("%s\n", "File open successfully!");
@@ -214,7 +218,6 @@ int main(int argc, char *argv[]) {
 
                     sendDataPac(count, numOfBlock, new_fd, &dataPac[0], &dataGram[0], &their_addr, addr_len);
 
-
                 }
             } else if (host == WRQ) {
                 //handle WRQ
@@ -223,7 +226,7 @@ int main(int argc, char *argv[]) {
                     //send err message
                     sendErrPac(0, new_fd, "Fail to open the file!", &errPac[0], their_addr, addr_len);
                     perror("openfile");
-                    exit(1);
+                    isEnd = 1;
                 } else {
                     //send ACK 0
                     numOfACK = 0;
@@ -234,6 +237,8 @@ int main(int argc, char *argv[]) {
 
             //handle the rest of the packets
             while(1) {
+
+                    if (isEnd == 1) break;
 
                     //check if timeout
                     while (readable_timeout(new_fd, 1) == 0) {
@@ -247,8 +252,7 @@ int main(int argc, char *argv[]) {
 
                     if (isEnd == 1) {
                         printf("There is no response from the client!\n");
-                        close(new_fd);
-                        exit(0);
+                        break;
                     } else {
                         numOfTimeouts = 0;
                     }
@@ -273,7 +277,6 @@ int main(int argc, char *argv[]) {
 
                             if (count < 512) {
                                 printf("This is the last block!\n");
-                                fclose(fstream);
                                 break;
                             }
 
@@ -310,7 +313,6 @@ int main(int argc, char *argv[]) {
 
                             if (rbytes < 512) {
                                 printf("%s\n", "Sent the last ACK!");
-                                fclose(fstream);
                                 break;
                             }
 
@@ -329,188 +331,16 @@ int main(int argc, char *argv[]) {
 
                         printf("Error message received, error code: %i\n", host);
                         printf("Error message received, error message: %s\n", recvErrMsg);
-                        exit(0);
-
+                        break;
                     }
                 }
 
-
-
-
-
+            printf("%s\n", "Child process closed");
+            printf("%s\n", "File stream closed");
+            fclose(fstream);
             close(new_fd);
             exit(0);
         } 
-
-
-        // //decode opcode
-        // memcpy((char *) &network, &buf[0], 2);
-        // host = ntohs(network);
-
-        // //printf("The opcode is: %i\n", host);
-
-        // //decode filename and mode
-        // strcpy(filename, &buf[2]);
-        // strcpy(mode, &buf[2 + strlen(filename) + 1]);
-
-        // //normalization the mode
-        // int i = 0;
-        // while(mode[i]) {
-        //   mode[i] = toupper(mode[i]);
-        //   i++;
-        // }
-
-        // printf("Server: filename is \"%s\"\n", filename);
-        // printf("Server: mode is \"%s\"\n", mode);
-
-        // if (strcmp(MODE1, mode) == 0) {
-        //     //in netascii mode
-        //     mode_flag = 1;
-        // } else if (strcmp(MODE2, mode) == 0) {
-        //     //in octet mode
-        //     mode_flag = 2;
-        // } else {
-        //     //send error message
-        //     sendErrPac(4, sockfd, "Illegal TFTP operation.", &errPac[0], their_addr, addr_len);
-        // }
-
-        // //The first packet can only be RRQ or WRQ
-
-        // if (host == RRQ) {
-        //     //handle RRQ
-        //     fstream = fopen(filename, "r");
-
-        //     if (fstream == NULL) {
-        //         //send err message
-        //         sendErrPac(1, sockfd, "Fail to open the file!", &errPac[0], their_addr, addr_len);
-        //         perror("openfile");
-        //         exit(1);
-        //     } else {
-        //         //send the first packet
-        //         printf("%s\n", "File open successfully!");
-
-        //         count = readForBothMode(mode_flag, fstream, &dataGram[0], &nextchar);
-
-        //         numOfBlock = 1;
-
-        //         sendDataPac(count, numOfBlock, sockfd, &dataPac[0], &dataGram[0],their_addr, addr_len);
-        //     }
-        // } else if (host == WRQ) {
-        //     //handle WRQ
-        //     fstream = fopen(filename, "w");
-        //     if (fstream == NULL) {
-        //         //send err message
-        //         sendErrPac(0, sockfd, "Fail to open the file!", &errPac[0], their_addr, addr_len);
-        //         perror("openfile");
-        //         exit(1);
-        //     } else {
-        //         //send ACK 0
-        //         numOfACK = 0;
-
-        //         sendACKPac(sockfd, numOfACK, &ackPac[0], their_addr, addr_len);
-        //     }
-        // }
-
-        // //handle the rest of the packets
-        // while(1) {
-
-        //         //check if timeout
-        //         while (readable_timeout(sockfd, 1) == 0) {
-        //             printf("Timeout!\n");
-        //             numOfTimeouts++;
-        //             if (numOfTimeouts >= 10) {
-        //                 isEnd = 1;
-        //                 break;
-        //             }
-        //         }
-
-        //         if (isEnd == 1) {
-        //             printf("There is no response from the client!\n");
-        //             break;
-        //         } else {
-        //             numOfTimeouts = 0;
-        //         }
-
-        //         memset(buf, 0, sizeof buf);
-
-        //         //try to receive the rest of the packet
-        //         if ((rbytes = recvfrom(sockfd, buf, MAXBUFLEN, 0, (struct sockaddr *)&their_addr, &addr_len)) == -1) {
-        //             perror("recvfrom");
-        //             exit(1);
-        //         }
-
-        //         //handle ACK
-        //         if (buf[1] == ACK) {
-        //             //obtain packet number
-        //             memcpy((char *) &network, &buf[2], 2);
-        //             host = ntohs(network);
-
-        //             if (host != numOfBlock) {
-        //                 printf("%s\n", "duplicate ACK received!");
-        //             } else {
-
-        //                 if (count < 512) {
-        //                     printf("This is the last block!\n");
-        //                     fclose(fstream);
-        //                     break;
-        //                 }
-
-        //                 //received the corret ACK
-        //                 //keep sending the next dataPac
-
-        //                 //Wrap-Around
-        //                 numOfBlock = (numOfBlock + 1) % 65536;
-
-        //                 count = readForBothMode(mode_flag, fstream, &dataGram[0], &nextchar);
-
-        //                 sendDataPac(count, numOfBlock, sockfd, &dataPac[0], &dataGram[0],their_addr, addr_len);
-
-        //             }
-        //         } else if (buf[1] == DATA) {
-
-        //             //obtain packet number
-        //             memcpy((char *) &network, &buf[2], 2);
-        //             host = ntohs(network);
-
-        //             if (host == numOfACK + 1) {
-        //                 //Wrap-Around
-        //                 numOfACK = (numOfACK + 1) % 65536;;
-
-        //                 sendACKPac(sockfd, numOfACK, &ackPac[0], their_addr, addr_len);
-
-        //                 //write data into a file
-        //                 //int fprintf(FILE *stream, const char *format, ...)
-        //                 memcpy(writeData, &buf[4], rbytes - 4);
-        //                 printf("The received bytes are: %d\n", rbytes - 4);
-
-        //                 // fprintf(fstream, "%s\n", writeData);
-        //                 writeForBothMode(mode_flag, fstream, writeData, rbytes - 4, &prev);
-
-        //                 if (rbytes < 512) {
-        //                     printf("%s\n", "Sent the last ACK!");
-        //                     fclose(fstream);
-        //                     break;
-        //                 }
-
-        //             } else {
-        //                 //the blockNum is the previous packet
-        //                 printf("duplicate data packet received!\n");
-        //             }
-
-        //         } else if (buf[1] == ERR){
-        //             //obtain errcode
-        //             memcpy((char *) &network, &buf[2], 2);
-        //             host = ntohs(network);
-
-        //             //obtain errmessage
-        //             strcpy(recvErrMsg, &buf[4]);
-
-        //             printf("Error message received, error code: %i\n", host);
-        //             printf("Error message received, error message: %s\n", recvErrMsg);
-        //             exit(0);
-
-        //         }
-        //     }
 
     }
 
