@@ -72,7 +72,7 @@ void sendACKPac(int sockfd, int numOfACK, char *ackPac, struct sockaddr_storage 
 }
 
 //send the data pac to the client
-void sendDataPac(int count, int numOfBlock, int sockfd, char *dataPac, char *dataGram, struct sockaddr_storage their_addr, socklen_t addr_len) {
+void sendDataPac(int count, int numOfBlock, int sockfd, char *dataPac, char *dataGram, struct sockaddr_storage *their_addr, socklen_t addr_len) {
 	printf("%s\n", "Inside sendDataPac function!");
 	uint16_t host, network;
 	char *pdataP = dataPac;
@@ -90,7 +90,7 @@ void sendDataPac(int count, int numOfBlock, int sockfd, char *dataPac, char *dat
 
     memcpy(pdataP, dataGram, count);
 
-    if ((sbytes = sendto(sockfd, dataPac, count + 4, 0, (struct sockaddr *)&their_addr, addr_len)) == -1) {
+    if ((sbytes = sendto(sockfd, dataPac, count + 4, 0, (struct sockaddr *)their_addr, addr_len)) == -1) {
         perror("talker: sendto");
         exit(1);
     } else {

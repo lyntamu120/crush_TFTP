@@ -95,7 +95,7 @@ int main(int argc, char *argv[]) {
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE; // use my IP
 
-    if ((rv = getaddrinfo(NULL, MYPORT, &hints, &servinfo)) != 0) {
+    if ((rv = getaddrinfo(argv[1], argv[2], &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
         return 1;
     }
@@ -131,6 +131,8 @@ int main(int argc, char *argv[]) {
             exit(1);
         }
 
+        printf("%s\n", ((struct sockaddr *)&their_addr)->sa_data);
+
         if (!fork()) {
             close(sockfd); // child doesn't need the main sockfd
 
@@ -138,7 +140,7 @@ int main(int argc, char *argv[]) {
             memset(&addr, 0, sizeof addr);
 
             addr.sin_family = AF_INET;
-            addr.sin_addr.s_addr = inet_addr("0.0.0.0");
+            addr.sin_addr.s_addr = inet_addr("127.0.0.1");
             addr.sin_port = htons(0); //assign an ephemeral port
 
             if ((new_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
@@ -210,7 +212,7 @@ int main(int argc, char *argv[]) {
 
                     numOfBlock = 1;
 
-                    sendDataPac(count, numOfBlock, new_fd, &dataPac[0], &dataGram[0], their_addr, addr_len);
+                    sendDataPac(count, numOfBlock, new_fd, &dataPac[0], &dataGram[0], &their_addr, addr_len);
 
 
                 }
@@ -283,7 +285,7 @@ int main(int argc, char *argv[]) {
 
                             count = readForBothMode(mode_flag, fstream, &dataGram[0], &nextchar);
 
-                            sendDataPac(count, numOfBlock, new_fd, &dataPac[0], &dataGram[0], (struct sockaddr *)&their_addr, addr_len);
+                            sendDataPac(count, numOfBlock, new_fd, &dataPac[0], &dataGram[0], &their_addr, addr_len);
 
                         }
                     } else if (buf[1] == DATA) {
